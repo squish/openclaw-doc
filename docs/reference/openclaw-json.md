@@ -45,6 +45,9 @@ For ready-to-use examples, see [Configuration Examples](/gateway/configuration-e
   // Channel integrations (WhatsApp, Telegram, Discord, etc.)
   channels: { ... },
 
+  // WhatsApp Baileys connection settings (sibling of channels)
+  web: { ... },
+
   // Agent defaults and per-agent overrides
   agents: { ... },
 
@@ -583,9 +586,13 @@ Legacy iMessage via `imsg rpc` (stdio). Prefer BlueBubbles for new setups.
       enabled: true,
       cliPath: "imsg",
       dbPath: "~/Library/Messages/chat.db",
+      remoteHost: "user@gateway-host",
       dmPolicy: "pairing",
-      allowFrom: ["+15555550123", "user@example.com"],
+      allowFrom: ["+15555550123", "user@example.com", "chat_id:123"],
       historyLimit: 50,
+      includeAttachments: false,
+      attachmentRoots: ["/Users/*/Library/Messages/Attachments"],
+      remoteAttachmentRoots: ["/Users/*/Library/Messages/Attachments"],
       mediaMaxMb: 16,
       service: "auto",
       region: "US",
@@ -1013,6 +1020,10 @@ See [Streaming](/concepts/streaming) and [Typing Indicators](/concepts/typing-in
 }
 ```
 
+- `model`: default model for spawned sub-agents. If omitted, sub-agents inherit the caller's model.
+- `runTimeoutSeconds`: default timeout for `sessions_spawn` when the tool call omits it. `0` means no timeout.
+- Per-subagent tool policy: `tools.subagents.tools.allow` / `tools.subagents.tools.deny`.
+
 ### `agents.list` — per-agent overrides
 
 Define multiple agents, each with its own workspace, model, and settings:
@@ -1245,6 +1256,8 @@ See [Session Management](/concepts/session).
 | `{provider}`      | `anthropic`                 |
 | `{thinkingLevel}` | `high`, `low`, `off`        |
 | `{identity.name}` | from agent identity         |
+
+Variables are case-insensitive. `{think}` is an alias for `{thinkingLevel}`.
 
 See [TTS](/tts).
 
@@ -1649,9 +1662,10 @@ See [Plugins](/tools/plugin).
     controlUi: {
       enabled: true,
       basePath: "/openclaw",
+      // root: "dist/control-ui",
       // allowedOrigins: ["https://control.example.com"],
-      // allowInsecureAuth: false,
       // dangerouslyAllowHostHeaderOriginFallback: false,
+      // allowInsecureAuth: false,
       // dangerouslyDisableDeviceAuth: false,
     },
 
@@ -1659,6 +1673,7 @@ See [Plugins](/tools/plugin).
       url: "ws://gateway.tailnet:18789",
       transport: "ssh",              // ssh | direct
       token: "your-token",
+      // password: "your-password",
     },
 
     trustedProxies: ["10.0.0.1"],
@@ -1929,7 +1944,8 @@ Split large configs across multiple files:
 - Array of files: deep-merged in order (later overrides earlier).
 - Sibling keys: merged after includes (override included values).
 - Nested includes: up to 10 levels deep.
-- Paths: resolved relative to the including file, must stay inside the top-level config directory.
+- Paths: resolved relative to the including file, must stay inside the top-level config directory (`dirname` of `openclaw.json`). Absolute/`../` forms are allowed only when they still resolve inside that boundary.
+- Errors: clear messages for missing files, parse errors, and circular includes.
 
 ---
 
