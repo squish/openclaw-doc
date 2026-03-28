@@ -1463,6 +1463,7 @@
               {
                 "group": "Technical reference",
                 "pages": [
+                  "reference/openclaw-json",
                   "pi",
                   "reference/wizard",
                   "reference/token-use",
