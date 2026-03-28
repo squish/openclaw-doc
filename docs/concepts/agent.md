@@ -23,14 +23,21 @@ per-session workspaces under `agents.defaults.sandbox.workspaceRoot` (see
 
 ## Bootstrap files (injected)
 
-Inside `agents.defaults.workspace`, OpenClaw expects these user-editable files:
+Inside `agents.defaults.workspace`, OpenClaw expects these user-editable files.
+All of them are **automatically injected** by OpenClaw at the start of every
+session — you do not need to instruct the agent to read them.
 
 - `AGENTS.md` — operating instructions + “memory”
 - `SOUL.md` — persona, boundaries, tone
 - `TOOLS.md` — user-maintained tool notes (e.g. `imsg`, `sag`, conventions)
-- `BOOTSTRAP.md` — one-time first-run ritual (deleted after completion)
 - `IDENTITY.md` — agent name/vibe/emoji
 - `USER.md` — user profile + preferred address
+- `HEARTBEAT.md` — optional heartbeat checklist; injected on every session start;
+  during heartbeat runs specifically, it is the **only** file injected (other
+  bootstrap files are skipped)
+- `BOOTSTRAP.md` — one-time first-run ritual (deleted after completion)
+- `MEMORY.md` — optional curated long-term memory; injected on normal sessions
+  but **skipped for subagent and cron sessions**
 
 On the first turn of a new session, OpenClaw injects the contents of these files directly into the agent context.
 
@@ -39,6 +46,12 @@ Blank files are skipped. Large files are trimmed and truncated with a marker so 
 If a file is missing, OpenClaw injects a single “missing file” marker line (and `openclaw setup` will create a safe default template).
 
 `BOOTSTRAP.md` is only created for a **brand new workspace** (no other bootstrap files present). If you delete it after completing the ritual, it should not be recreated on later restarts.
+
+**Not bootstrap files:** `BOOT.md` is a gateway-startup checklist used only on
+gateway restart (when internal hooks are enabled) — it is never injected into
+regular sessions. `memory/YYYY-MM-DD.md` daily logs are also not injected
+automatically; the agent reads them only when instructed to do so (for example
+by rules in `AGENTS.md`).
 
 To disable bootstrap file creation entirely (for pre-seeded workspaces), set:
 
