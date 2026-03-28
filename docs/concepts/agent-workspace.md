@@ -63,20 +63,24 @@ If you intentionally keep multiple workspaces, make sure
 
 ## Workspace file map (what each file means)
 
-These are the standard files OpenClaw expects inside the workspace:
+Files fall into three categories: files OpenClaw **automatically injects** into
+the agent context, files the agent **reads on its own instruction** (not
+auto-injected), and **gateway-only** files used outside of normal sessions.
+
+### Files auto-injected by OpenClaw
+
+OpenClaw reads and injects these files directly into the agent context at the
+start of every session. You do not need to instruct the agent to read them.
 
 - `AGENTS.md`
   - Operating instructions for the agent and how it should use memory.
-  - Loaded at the start of every session.
   - Good place for rules, priorities, and "how to behave" details.
 
 - `SOUL.md`
   - Persona, tone, and boundaries.
-  - Loaded every session.
 
 - `USER.md`
   - Who the user is and how to address them.
-  - Loaded every session.
 
 - `IDENTITY.md`
   - The agent's name, vibe, and emoji.
@@ -88,26 +92,49 @@ These are the standard files OpenClaw expects inside the workspace:
 
 - `HEARTBEAT.md`
   - Optional tiny checklist for heartbeat runs.
+  - Injected on every session start. During heartbeat runs specifically, it
+    is the **only** file injected (other bootstrap files are skipped).
   - Keep it short to avoid token burn.
-
-- `BOOT.md`
-  - Optional startup checklist executed on gateway restart when internal hooks are enabled.
-  - Keep it short; use the message tool for outbound sends.
 
 - `BOOTSTRAP.md`
   - One-time first-run ritual.
   - Only created for a brand-new workspace.
   - Delete it after the ritual is complete.
 
-- `memory/YYYY-MM-DD.md`
-  - Daily memory log (one file per day).
-  - Recommended to read today + yesterday on session start.
-
 - `MEMORY.md` (optional)
   - Curated long-term memory.
-  - Only load in the main, private session (not shared/group contexts).
+  - Injected on normal sessions; skipped for subagent and cron sessions.
+
+If any of these files is missing, OpenClaw injects a single "missing file"
+marker and continues. Large files are truncated; adjust limits with
+`agents.defaults.bootstrapMaxChars` (default: 20000) and
+`agents.defaults.bootstrapTotalMaxChars` (default: 150000).
+`openclaw setup` can recreate missing defaults without overwriting existing
+files.
+
+### Files read by the agent on instruction
+
+These files are **not** injected automatically by OpenClaw. The agent reads
+them only when instructed to do so (for example by rules in `AGENTS.md`).
+
+- `memory/YYYY-MM-DD.md`
+  - Daily memory log (one file per day).
+  - Recommended pattern: instruct the agent in `AGENTS.md` to read today and
+    yesterday on session start.
 
 See [Memory](/concepts/memory) for the workflow and automatic memory flush.
+
+### Gateway-only files
+
+These files are used by OpenClaw outside of normal session bootstrap.
+
+- `BOOT.md`
+  - Optional startup checklist executed on gateway restart when internal hooks
+    are enabled.
+  - Not a session bootstrap file; never injected into regular sessions.
+  - Keep it short; use the message tool for outbound sends.
+
+### Other workspace content
 
 - `skills/` (optional)
   - Workspace-specific skills.
@@ -115,13 +142,6 @@ See [Memory](/concepts/memory) for the workflow and automatic memory flush.
 
 - `canvas/` (optional)
   - Canvas UI files for node displays (for example `canvas/index.html`).
-
-If any bootstrap file is missing, OpenClaw injects a "missing file" marker into
-the session and continues. Large bootstrap files are truncated when injected;
-adjust limits with `agents.defaults.bootstrapMaxChars` (default: 20000) and
-`agents.defaults.bootstrapTotalMaxChars` (default: 150000).
-`openclaw setup` can recreate missing defaults without overwriting existing
-files.
 
 ## What is NOT in the workspace
 
