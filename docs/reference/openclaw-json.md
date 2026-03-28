@@ -96,6 +96,9 @@ For ready-to-use examples, see [Configuration Examples](/gateway/configuration-e
   // Multi-agent routing bindings
   bindings: [ ... ],
 
+  // Chat command handling (text commands, bash, /config, etc.)
+  commands: { ... },
+
   // Wizard metadata (written by guided flows)
   wizard: { ... },
 }
@@ -344,7 +347,7 @@ See [WhatsApp](/channels/whatsapp).
           allowFrom: ["@admin"],
           systemPrompt: "Keep answers brief.",
           topics: {
-            "99": { requireMention: false, skills: ["search"] },
+            "99": { requireMention: false, skills: ["search"], systemPrompt: "Stay on topic." },
           },
         },
       },
@@ -356,10 +359,22 @@ See [WhatsApp](/channels/whatsapp).
       linkPreview: true,
       streaming: "partial",           // off | partial | block | progress
       actions: { reactions: true, sendMessage: true },
-      reactionNotifications: "own",   // off | own | all
+      reactionNotifications: "own",   // off | own | all | allowlist
       mediaMaxMb: 100,
+      retry: {
+        attempts: 3,
+        minDelayMs: 400,
+        maxDelayMs: 30000,
+        jitter: 0.1,
+      },
+      network: {
+        autoSelectFamily: true,
+        dnsResultOrder: "ipv4first",
+      },
       proxy: "socks5://localhost:9050",
       webhookUrl: "https://example.com/telegram-webhook",
+      webhookSecret: "secret",
+      webhookPath: "/telegram-webhook",
     },
   },
 }
@@ -393,16 +408,29 @@ See [Telegram](/channels/telegram).
           requireMention: false,
           ignoreOtherMentions: true,
           reactionNotifications: "own",
+          users: ["987654321098765432"],
           channels: {
             general: { allow: true },
-            help: { allow: true, requireMention: true },
+            help: {
+              allow: true,
+              requireMention: true,
+              users: ["987654321098765432"],
+              skills: ["docs"],
+              systemPrompt: "Short answers only.",
+            },
           },
         },
       },
       historyLimit: 20,
       textChunkLimit: 2000,
+      chunkMode: "length",            // length | newline
       streaming: "off",
       maxLinesPerMessage: 17,
+      ui: {
+        components: {
+          accentColor: "#5865F2",
+        },
+      },
       threadBindings: {
         enabled: true,
         idleHours: 24,
@@ -412,7 +440,15 @@ See [Telegram](/channels/telegram).
       voice: {
         enabled: true,
         autoJoin: [{ guildId: "123456789012345678", channelId: "234567890123456789" }],
+        daveEncryption: true,
+        decryptionFailureTolerance: 24,
         tts: { provider: "openai", openai: { voice: "alloy" } },
+      },
+      retry: {
+        attempts: 3,
+        minDelayMs: 500,
+        maxDelayMs: 30000,
+        jitter: 0.1,
       },
     },
   },
@@ -432,17 +468,36 @@ See [Discord](/channels/discord).
       appToken: "xapp-...",           // or SLACK_APP_TOKEN env (socket mode)
       dmPolicy: "pairing",
       allowFrom: ["U123"],
+      dm: { enabled: true, groupEnabled: false, groupChannels: ["G123"] },
       channels: {
-        C123: { allow: true, requireMention: true },
-        "#general": { allow: true, requireMention: true },
+        C123: { allow: true, requireMention: true, allowBots: false },
+        "#general": {
+          allow: true,
+          requireMention: true,
+          allowBots: false,
+          users: ["U123"],
+          skills: ["docs"],
+          systemPrompt: "Short answers only.",
+        },
       },
       historyLimit: 50,
+      allowBots: false,
       reactionNotifications: "own",
+      reactionAllowlist: ["U123"],
+      replyToMode: "off",             // off | first | all
       thread: { historyScope: "thread", inheritParent: false },
       actions: {
         reactions: true, messages: true, pins: true, memberInfo: true, emojiList: true,
       },
-      slashCommand: { enabled: true, name: "openclaw", ephemeral: true },
+      slashCommand: {
+        enabled: true,
+        name: "openclaw",
+        sessionPrefix: "slack:slash",
+        ephemeral: true,
+      },
+      typingReaction: "hourglass_flowing_sand",
+      textChunkLimit: 4000,
+      chunkMode: "length",
       streaming: "partial",
       nativeStreaming: true,
       mediaMaxMb: 20,
@@ -463,7 +518,9 @@ See [Slack](/channels/slack).
       account: "+15555550123",
       dmPolicy: "pairing",
       allowFrom: ["+15551234567", "uuid:123e4567-e89b-12d3-a456-426614174000"],
-      reactionNotifications: "own",
+      configWrites: true,
+      reactionNotifications: "own",   // off | own | all | allowlist
+      reactionAllowlist: ["+15551234567", "uuid:123e4567-e89b-12d3-a456-426614174000"],
       historyLimit: 50,
     },
   },
@@ -483,9 +540,13 @@ See [Signal](/channels/signal).
       audienceType: "app-url",
       audience: "https://gateway.example.com/googlechat",
       webhookPath: "/googlechat",
+      botUser: "users/1234567890",
       dm: { enabled: true, policy: "pairing", allowFrom: ["users/1234567890"] },
       groupPolicy: "allowlist",
       groups: { "spaces/AAAA": { allow: true, requireMention: true } },
+      actions: { reactions: true },
+      typingIndicator: "message",
+      mediaMaxMb: 20,
     },
   },
 }
@@ -566,6 +627,15 @@ Mattermost (plugin-backed: `openclaw plugins install @openclaw/mattermost`).
       baseUrl: "https://chat.example.com",
       dmPolicy: "pairing",
       chatmode: "oncall",             // oncall | onmessage | onchar
+      oncharPrefixes: [">", "!"],
+      commands: {
+        native: true,
+        nativeSkills: true,
+        callbackPath: "/api/channels/mattermost/command",
+        callbackUrl: "https://gateway.example.com/api/channels/mattermost/command",
+      },
+      textChunkLimit: 4000,
+      chunkMode: "length",
     },
   },
 }
@@ -583,10 +653,13 @@ IRC (extension-backed).
     irc: {
       enabled: true,
       dmPolicy: "pairing",
+      configWrites: true,
       nickserv: {
         enabled: true,
         service: "NickServ",
         password: "${IRC_NICKSERV_PASSWORD}",
+        register: false,
+        registerEmail: "bot@example.com",
       },
     },
   },
@@ -729,6 +802,11 @@ Optional text-only fallback backends when API providers fail:
           output: "json",
           modelArg: "--model",
           sessionArg: "--session",
+          sessionMode: "existing",
+          systemPromptArg: "--system",
+          systemPromptWhen: "first",
+          imageArg: "--image",
+          imageMode: "repeat",
         },
       },
     },
@@ -756,6 +834,7 @@ Periodic heartbeat runs:
         target: "none",           // none | last | whatsapp | telegram | discord | ...
         prompt: "Read HEARTBEAT.md if it exists...",
         ackMaxChars: 300,
+        suppressToolErrorWarnings: false,
       },
     },
   },
@@ -773,6 +852,7 @@ Context compaction behavior:
       compaction: {
         mode: "safeguard",        // default | safeguard (chunked summarization for long histories)
         timeoutSeconds: 900,
+        reserveTokensFloor: 24000,
         identifierPolicy: "strict", // strict | off | custom
         identifierInstructions: "Preserve deployment IDs...",
         postCompactionSections: ["Session Startup", "Red Lines"],
@@ -780,6 +860,7 @@ Context compaction behavior:
         memoryFlush: {
           enabled: true,
           softThresholdTokens: 6000,
+          systemPrompt: "Session nearing compaction. Store durable memories now.",
           prompt: "Write any lasting notes to memory/YYYY-MM-DD.md...",
         },
       },
@@ -852,6 +933,7 @@ Sandbox configuration for running agent sessions in isolation:
           seccompProfile: "/path/to/seccomp.json",
           apparmorProfile: "openclaw-sandbox",
           dns: ["1.1.1.1", "8.8.8.8"],
+          extraHosts: ["internal.service:10.0.0.5"],
           binds: ["/home/user/source:/source:rw"],
         },
         ssh: {
@@ -859,7 +941,10 @@ Sandbox configuration for running agent sessions in isolation:
           command: "ssh",
           workspaceRoot: "/tmp/openclaw-sandboxes",
           strictHostKeyChecking: true,
+          updateHostKeys: true,
           identityFile: "~/.ssh/id_ed25519",
+          certificateFile: "~/.ssh/id_ed25519-cert.pub",
+          knownHostsFile: "~/.ssh/known_hosts",
           // SecretRef alternatives:
           // identityData: { source: "env", provider: "default", id: "SSH_IDENTITY" },
         },
@@ -868,9 +953,14 @@ Sandbox configuration for running agent sessions in isolation:
           image: "openclaw-sandbox-browser:bookworm-slim",
           network: "openclaw-sandbox-browser",
           cdpPort: 9222,
+          cdpSourceRange: "172.21.0.1/32",
+          vncPort: 5900,
+          noVncPort: 6080,
           headless: false,
           enableNoVnc: true,
           allowHostControl: false,
+          autoStart: true,
+          autoStartTimeoutMs: 12000,
         },
         prune: {
           idleHours: 24,
@@ -936,6 +1026,7 @@ Define multiple agents, each with its own workspace, model, and settings:
         default: true,
         name: "Main Agent",
         workspace: "~/.openclaw/workspace",
+        agentDir: "~/.openclaw/agents/main/agent",
         model: "anthropic/claude-opus-4-6",
         thinkingDefault: "high",
         reasoningDefault: "on",
@@ -960,6 +1051,15 @@ Define multiple agents, each with its own workspace, model, and settings:
         },
         subagents: {
           allowAgents: ["*"], // ["*"] = any agent; default: same agent only
+        },
+        runtime: {
+          type: "acp",
+          acp: {
+            agent: "codex",
+            backend: "acpx",
+            mode: "persistent",
+            cwd: "/workspace/openclaw",
+          },
         },
       },
     ],
@@ -1084,7 +1184,7 @@ See [Session Management](/concepts/session).
       historyLimit: 50,
     },
     queue: {
-      mode: "collect",               // steer | followup | collect | steer-backlog | queue | interrupt
+      mode: "collect",               // steer | followup | collect | steer-backlog | steer+backlog | queue | interrupt
       debounceMs: 1000,
       cap: 20,
       drop: "summarize",             // old | new | summarize
@@ -1108,10 +1208,15 @@ See [Session Management](/concepts/session).
       modelOverrides: { enabled: true },
       maxTextLength: 4000,
       timeoutMs: 30000,
+      prefsPath: "~/.openclaw/settings/tts.json",
       elevenlabs: {
         apiKey: "elevenlabs_api_key",
+        baseUrl: "https://api.elevenlabs.io",
         voiceId: "voice_id",
         modelId: "eleven_multilingual_v2",
+        seed: 42,
+        applyTextNormalization: "auto",
+        languageCode: "en",
         voiceSettings: {
           stability: 0.5,
           similarityBoost: 0.75,
@@ -1121,6 +1226,8 @@ See [Session Management](/concepts/session).
         },
       },
       openai: {
+        apiKey: "openai_api_key",
+        baseUrl: "https://api.openai.com/v1",
         model: "gpt-4o-mini-tts",
         voice: "alloy",
       },
@@ -1191,7 +1298,7 @@ See [TTS](/tts).
 | `group:automation` | `cron`, `gateway`                                                                        |
 | `group:messaging`  | `message`                                                                                |
 | `group:nodes`      | `nodes`                                                                                  |
-| `group:openclaw`   | All built-in tools                                                                       |
+| `group:openclaw`   | All built-in tools (excludes provider plugins)                                           |
 
 ### `tools` fields
 
@@ -1256,8 +1363,10 @@ See [TTS](/tts).
       fetch: {
         enabled: true,
         maxChars: 50000,
+        maxCharsCap: 50000,
         timeoutSeconds: 30,
         cacheTtlMinutes: 15,
+        userAgent: "custom-ua",
       },
     },
 
@@ -1295,6 +1404,7 @@ See [TTS](/tts).
         maxTotalBytes: 5242880,
         maxFiles: 50,
         maxFileBytes: 1048576,
+        retainOnSessionKeep: false,
       },
     },
 
@@ -1307,8 +1417,13 @@ See [TTS](/tts).
     // Sandbox tool policy (applied inside sandboxed sessions)
     sandbox: {
       tools: {
-        allow: ["exec", "process", "read", "write", "edit", "sessions_list"],
-        deny: ["browser", "canvas", "nodes", "cron"],
+        allow: [
+          "exec", "process", "read", "write", "edit",
+          "apply_patch",
+          "sessions_list", "sessions_history", "sessions_send",
+          "sessions_spawn", "session_status",
+        ],
+        deny: ["browser", "canvas", "nodes", "cron", "discord", "gateway"],
       },
     },
   },
@@ -1350,7 +1465,10 @@ Add custom model providers or override built-in ones:
     bedrockDiscovery: {
       enabled: false,
       region: "us-east-1",
+      providerFilter: ["anthropic"],
       refreshInterval: "1h",
+      defaultContextWindow: 200000,
+      defaultMaxTokens: 8192,
     },
   },
 }
@@ -1413,6 +1531,11 @@ See [Custom providers](/gateway/configuration-reference#custom-providers-and-bas
         enabled: true,
         hooks: { allowPromptInjection: false },
         config: { provider: "twilio" },
+        env: { TWILIO_ACCOUNT_SID: "AC..." },
+        subagent: {
+          allowModelOverride: true,
+          allowedModels: ["provider/model", "*"],
+        },
       },
     },
     slots: {
@@ -1426,7 +1549,11 @@ See [Custom providers](/gateway/configuration-reference#custom-providers-and-bas
 - Loaded from `~/.openclaw/extensions`, `<workspace>/.openclaw/extensions`, and `plugins.load.paths`.
 - `allow`: optional allowlist; only listed plugins load. `deny` wins over `allow`.
 - `plugins.entries.<id>.apiKey`: plugin-level API key convenience field.
+- `plugins.entries.<id>.env`: plugin-scoped env var map.
+- `plugins.entries.<id>.subagent.allowModelOverride`: allow plugin to request per-run provider/model overrides for background subagent runs.
+- `plugins.entries.<id>.subagent.allowedModels`: optional allowlist of `provider/model` targets for trusted subagent overrides.
 - `plugins.entries.<id>.hooks.allowPromptInjection`: when `false`, core blocks prompt-mutating hook fields.
+- `plugins.installs`: CLI-managed install metadata used by `openclaw plugins update`. Treat as managed state; prefer CLI commands over manual edits.
 - **Config changes require a gateway restart.**
 
 See [Plugins](/tools/plugin).
@@ -1524,6 +1651,8 @@ See [Plugins](/tools/plugin).
       basePath: "/openclaw",
       // allowedOrigins: ["https://control.example.com"],
       // allowInsecureAuth: false,
+      // dangerouslyAllowHostHeaderOriginFallback: false,
+      // dangerouslyDisableDeviceAuth: false,
     },
 
     remote: {
@@ -1556,7 +1685,12 @@ See [Plugins](/tools/plugin).
     http: {
       endpoints: {
         chatCompletions: { enabled: false },
-        responses: { enabled: false },
+        responses: {
+          enabled: false,
+          // maxUrlParts: 10,
+          // files: { urlAllowlist: [], allowUrl: true },
+          // images: { urlAllowlist: [], allowUrl: true },
+        },
       },
       securityHeaders: {
         // strictTransportSecurity: "...",  // for HTTPS origins only
@@ -1625,6 +1759,8 @@ See [Gateway](/gateway/index), [Authentication](/gateway/authentication), and [T
       includeBody: true,
       maxBytes: 20000,
       renewEveryMinutes: 720,
+      serve: { bind: "127.0.0.1", port: 8788, path: "/" },
+      tailscale: { mode: "funnel", path: "/gmail-pubsub" },
       model: "openrouter/meta-llama/llama-3.3-70b-instruct:free",
       thinking: "off",
     },
@@ -1844,14 +1980,23 @@ Template placeholders expanded in `tools.media.models[].args`:
 | ------------------ | ------------------------------------------ |
 | `{{Body}}`         | Full inbound message body                  |
 | `{{RawBody}}`      | Raw body (no history/sender wrappers)      |
+| `{{BodyStripped}}` | Body with group mentions stripped          |
 | `{{From}}`         | Sender identifier                          |
 | `{{To}}`           | Destination identifier                     |
-| `{{MediaPath}}`    | Local media file path                      |
+| `{{MessageSid}}`   | Channel message id                         |
+| `{{SessionId}}`    | Current session UUID                       |
+| `{{IsNewSession}}` | `"true"` when new session created          |
+| `{{MediaUrl}}`     | Inbound media pseudo-URL                   |
+| `{{MediaPath}}`    | Local media path                           |
 | `{{MediaType}}`    | Media type (image/audio/document/…)        |
 | `{{Transcript}}`   | Audio transcript                           |
 | `{{Prompt}}`       | Resolved media prompt for CLI entries      |
 | `{{MaxChars}}`     | Resolved max output chars for CLI entries  |
 | `{{ChatType}}`     | `"direct"` or `"group"`                    |
+| `{{GroupSubject}}` | Group subject (best effort)                |
+| `{{GroupMembers}}` | Group members preview (best effort)        |
+| `{{SenderName}}`   | Sender display name (best effort)          |
+| `{{SenderE164}}`   | Sender phone number (best effort)          |
 | `{{Provider}}`     | Channel provider hint (whatsapp, telegram…)|
 
 ---
