@@ -1697,6 +1697,8 @@ See [Plugins](/tools/plugin).
     channelStaleEventThresholdMinutes: 30,
     channelMaxRestartsPerHour: 10,
 
+    reload: { mode: "hybrid", debounceMs: 300 }, // hybrid | hot | restart | off
+
     http: {
       endpoints: {
         chatCompletions: { enabled: false },
@@ -1976,12 +1978,12 @@ The gateway watches `openclaw.json` for changes. Most changes apply without down
 | media, browser          | |
 | UI, auth profiles       | |
 
-Configure reload behavior with `gateway.hotReload`:
+Configure reload behavior with `gateway.reload`:
 
 ```json5
 {
   gateway: {
-    hotReload: "hybrid", // hybrid | hot | restart | off
+    reload: { mode: "hybrid", debounceMs: 300 }, // hybrid | hot | restart | off
   },
 }
 ```
